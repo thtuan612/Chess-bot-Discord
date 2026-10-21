@@ -2,7 +2,7 @@
 
 Bot cờ vua 1v1 cho Discord. Mỗi ván chạy trong **thread riêng**; người khác vào xem được, không đi quân được.
 
-Đi quân bằng **Discord UI** (menu trên ảnh bàn cờ). Bàn cờ luôn được **ghim và đẩy xuống cuối** thread khi có chat. Sau khi kết thúc, phòng công khai bị khoá và bản xem lại nằm trong **lịch sử riêng** (chỉ 2 người chơi + quản trị).
+Đi quân bằng **Discord UI** (menu trên ảnh bàn cờ). Cùng một tin nhắn ảnh được **edit** sau mỗi nước; chỉ đẩy xuống cuối khi chat làm trôi. Sau khi kết thúc, phòng công khai bị khoá và bản xem lại nằm trong **lịch sử riêng** (chỉ 2 người chơi + quản trị).
 
 ## Cài đặt
 
@@ -23,7 +23,7 @@ Bot cờ vua 1v1 cho Discord. Mỗi ván chạy trong **thread riêng**; ngườ
    ```
    Tạo một kênh văn bản (ví dụ `#cờ-lịch-sử`), bật quyền bot **Create Private Threads**, copy ID kênh vào `HISTORY_CHANNEL_ID`.
 
-5. Mời bot với quyền: Send Messages, Create Public/Private Threads, Send Messages in Threads, Manage Threads, Manage Messages (xoá/ghim bàn cờ), Attach Files, Use Slash Commands.
+5. Mời bot với quyền: Send Messages, Create Public/Private Threads, Send Messages in Threads, Manage Threads, Manage Messages (xoá tin bàn cờ khi bị chat đẩy), Attach Files, Use Slash Commands.
 
 6. Chạy:
    ```bash
@@ -49,10 +49,11 @@ Bot cờ vua 1v1 cho Discord. Mỗi ván chạy trong **thread riêng**; ngườ
 
 ## Tính năng chính
 
-- **Bảng xếp hạng**: `/leaderboard` hoặc nút trên hub — nút ⏮ ◀ ▶ ⏭ duyệt danh sách dài (10 người/trang), điểm = thắng 1 + hòa 0.5.
-- **Bàn cờ luôn ở cuối**: mỗi nước đi và mỗi lần có chat trong phòng, bot xoá tin cũ rồi gửi lại ở cuối + ghim (có debounce tránh spam API).
-- **Lịch sử**: khi ván xong, thread công khai bị khoá; bot tạo **private thread** trong kênh lịch sử, mời đúng 2 người chơi, gửi bàn cuối + chuỗi nước đi, rồi khoá (chỉ xem). Quản trị viên có quyền Manage Threads vẫn xem được.
-- **Hiệu suất**: cache PNG theo FEN, khoá theo thread, debounce đẩy bàn cờ, không còn tiến trình Stockfish.
+- **Bảng xếp hạng công khai**: `/leaderboard` hoặc nút trên hub — ⏮ ◀ ▶ ⏭ (10 người/trang), điểm = thắng 1 + hòa 0.5.
+- **Bàn cờ liền mạch**: mỗi nước **edit** cùng một tin nhắn ảnh; chỉ xoá + gửi lại ở cuối khi chat làm trôi (debounce, không ghim / không đổi tên phòng).
+- **Tạo phòng riêng tư**: `/chess vs` chỉ báo xác nhận ephemeral cho người gọi.
+- **Lịch sử**: khi ván xong, thread công khai bị khoá (không đổi tên); bot tạo **private thread** trong kênh lịch sử, mời đúng 2 người chơi, gửi bàn cuối + chuỗi nước đi, rồi khoá (chỉ xem).
+- **Hiệu suất**: cache PNG theo FEN, khoá theo thread, debounce đẩy bàn cờ.
 
 ## Đã gỡ
 

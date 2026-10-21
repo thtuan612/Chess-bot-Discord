@@ -7,8 +7,8 @@ Lệnh:
   /leaderboard        - bảng xếp hạng (phân trang Discord UI)
   /resign             - đầu hàng ván hiện tại
 
-Đi quân bằng Discord UI. Bàn cờ luôn được giữ ở cuối thread (ghim + đẩy xuống).
-Sau khi kết thúc: khoá thread công khai và lưu bản xem lại riêng (chỉ 2 người chơi + quản trị).
+Đi quân bằng Discord UI. Cùng một tin nhắn bàn cờ được edit sau mỗi nước;
+chỉ đẩy xuống cuối khi chat làm nó trôi. Phòng tạo xong chỉ báo riêng cho bạn.
 """
 from __future__ import annotations
 
@@ -105,9 +105,9 @@ def hub_embed() -> discord.Embed:
             "**Cách chơi**\n"
             "• Bấm **Thách đấu** hoặc dùng `/chess vs`\n"
             "• Trên ảnh bàn cờ: chọn ô xuất phát → ô đích\n"
-            "• Bàn cờ luôn được giữ ở cuối phòng đấu\n"
+            "• Bàn cờ cập nhật tại chỗ; chat sẽ đẩy nó xuống cuối phòng\n"
             "• Kết thúc → phòng khoá, bản lưu trong lịch sử (chỉ 2 người chơi + quản trị)\n\n"
-            "Xem bảng xếp hạng bằng nút bên dưới hoặc `/leaderboard`."
+            "Xem bảng xếp hạng công khai bằng nút bên dưới hoặc `/leaderboard`."
         ),
         color=0x5865F2,
     )
@@ -184,17 +184,11 @@ async def archive_to_history(
     except discord.HTTPException:
         pass
 
+    # Chỉ khoá/lưu trữ — không đổi tên (tránh spam thông báo)
     try:
-        await public_thread.edit(
-            name=f"[xong] {public_thread.name}"[:100],
-            archived=True,
-            locked=True,
-        )
+        await public_thread.edit(archived=True, locked=True)
     except discord.HTTPException:
-        try:
-            await public_thread.edit(archived=True, locked=True)
-        except discord.HTTPException:
-            pass
+        pass
 
 
 async def cleanup_game(
@@ -227,8 +221,8 @@ async def cleanup_game(
             game.black_name,
         )
 
-    # Gỡ UI trên bàn cờ công khai
-    await update_board(thread, game, result_line, force_bottom=True, disable_view=True)
+    # Edit tại chỗ (giữ cùng tin nhắn/ảnh), gỡ nút đi quân
+    await update_board(thread, game, result_line, force_bottom=False, disable_view=True)
     await archive_to_history(thread, game, result_line)
 
     games.pop(thread.id, None)
@@ -456,25 +450,26 @@ async def _ensure_player_turn(
 
 
 # ---------------------------------------------------------------------------
-# Bàn cờ: luôn ở cuối + ghim
+# Bàn cờ: edit tại chỗ; chỉ đẩy xuống cuối khi bị chat làm trôi
 # ---------------------------------------------------------------------------
 
 
-async def _unpin_and_delete(thread: discord.Thread, message_id: Optional[int]) -> None:
+async def _is_last_message(thread: discord.Thread, message_id: int) -> bool:
+    try:
+        async for msg in thread.history(limit=1):
+            return msg.id == message_id
+    except discord.HTTPException:
+        pass
+    return False
+
+
+async def _delete_quiet(thread: discord.Thread, message_id: Optional[int]) -> None:
     if not message_id:
         return
     try:
         msg = await thread.fetch_message(message_id)
-    except (discord.NotFound, discord.HTTPException):
-        return
-    try:
-        if msg.pinned:
-            await msg.unpin(reason="Đẩy bàn cờ xuống cuối")
-    except discord.HTTPException:
-        pass
-    try:
         await msg.delete()
-    except discord.HTTPException:
+    except (discord.NotFound, discord.HTTPException):
         pass
 
 
@@ -483,45 +478,36 @@ async def update_board(
     game: ChessGame,
     caption: str = "Bàn cờ",
     *,
-    force_bottom: bool = True,
+    force_bottom: bool = False,
     disable_view: bool = False,
 ):
-    """Gửi lại bàn cờ ở cuối thread và ghim — tránh bị chat đẩy mất."""
+    """Ưu tiên edit cùng một tin nhắn ảnh. Chỉ gửi lại ở cuối khi thật sự bị trôi."""
     async with _lock_for(thread.id):
         embed = build_board_embed(game, caption)
         file = board_file(game)
-        view = ChessMoveView(game, disabled=disable_view or game.finished)
+        view = None if (disable_view or game.finished) else ChessMoveView(game)
 
+        relocate = False
         if force_bottom and game.board_message_id:
-            await _unpin_and_delete(thread, game.board_message_id)
-            game.board_message_id = None
+            if not await _is_last_message(thread, game.board_message_id):
+                relocate = True
+                await _delete_quiet(thread, game.board_message_id)
+                game.board_message_id = None
 
-        if game.board_message_id and not force_bottom:
+        if game.board_message_id and not relocate:
             try:
                 msg = await thread.fetch_message(game.board_message_id)
-                await msg.edit(
-                    embed=embed,
-                    attachments=[file],
-                    view=view if not (disable_view or game.finished) else None,
-                )
+                await msg.edit(embed=embed, attachments=[file], view=view)
                 return
             except (discord.NotFound, discord.HTTPException):
                 game.board_message_id = None
 
-        msg = await thread.send(
-            embed=embed,
-            file=file,
-            view=view if not (disable_view or game.finished) else None,
-        )
+        msg = await thread.send(embed=embed, file=file, view=view)
         game.board_message_id = msg.id
-        try:
-            await msg.pin(reason="Giữ bàn cờ dễ tìm")
-        except discord.HTTPException:
-            pass
 
 
 def schedule_board_bottom(thread: discord.Thread, game: ChessGame) -> None:
-    """Debounce: chat dày đặc chỉ đẩy bàn cờ 1 lần sau khoảng nghỉ."""
+    """Debounce: chat dày đặc chỉ đẩy bàn cờ 1 lần nếu nó không còn ở cuối."""
     old = _board_refresh_tasks.get(thread.id)
     if old and not old.done():
         old.cancel()
@@ -530,6 +516,8 @@ def schedule_board_bottom(thread: discord.Thread, game: ChessGame) -> None:
         try:
             await asyncio.sleep(BOARD_DEBOUNCE_SEC)
             if game.finished or games.get(thread.id) is not game:
+                return
+            if game.board_message_id and await _is_last_message(thread, game.board_message_id):
                 return
             turn = "Trắng" if game.board.turn == chess.WHITE else "Đen"
             await update_board(thread, game, f"Lượt {turn}", force_bottom=True)
@@ -544,7 +532,8 @@ def schedule_board_bottom(thread: discord.Thread, game: ChessGame) -> None:
 async def apply_move(thread: discord.Thread, game: ChessGame, move: chess.Move):
     san = game.board.san(move)
     game.board.push(move)
-    await update_board(thread, game, f"Đã đi: {san}", force_bottom=True)
+    # Edit cùng tin nhắn → ảnh bàn cờ liền mạch, không spam tin mới
+    await update_board(thread, game, f"Đã đi: {san}", force_bottom=False)
     await check_game_end(thread, game)
 
 
@@ -663,9 +652,7 @@ class HubView(discord.ui.View):
     )
     async def show_lb(self, interaction: discord.Interaction, button: discord.ui.Button):
         embed, _ = leaderboard_embed(0)
-        await interaction.response.send_message(
-            embed=embed, view=LeaderboardView(0), ephemeral=True
-        )
+        await interaction.response.send_message(embed=embed, view=LeaderboardView(0))
 
     @discord.ui.button(
         label="Hướng dẫn",
@@ -677,11 +664,11 @@ class HubView(discord.ui.View):
     async def help_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message(
             "**Cách chơi**\n"
-            "1. `/chess vs @ai_đó` → tạo thread\n"
+            "1. `/chess vs @ai_đó` → tạo thread (chỉ bạn thấy xác nhận)\n"
             "2. Trên ảnh bàn cờ: chọn ô xuất phát → ô đích (phong cấp nếu cần)\n"
-            "3. Chat trong phòng không sao — bot sẽ đẩy bàn cờ xuống cuối và ghim\n"
+            "3. Mỗi nước edit cùng một ảnh; chat làm trôi thì bot đẩy bàn cờ xuống cuối\n"
             "4. Kết thúc / đầu hàng → phòng khoá, bản lưu vào lịch sử riêng\n\n"
-            "`/leaderboard` — xem xếp hạng (phân trang)\n"
+            "`/leaderboard` — xếp hạng công khai (phân trang)\n"
             "`/chess hub` — gửi lại panel kênh chính (quản trị)",
             ephemeral=True,
         )
@@ -711,7 +698,7 @@ async def start_vs_match(interaction: discord.Interaction, doi_thu: discord.Memb
         return
 
     if not interaction.response.is_done():
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
 
     parent = interaction.channel
     if isinstance(parent, discord.Thread):
@@ -739,12 +726,13 @@ async def start_vs_match(interaction: discord.Interaction, doi_thu: discord.Memb
     active_player[interaction.user.id] = thread.id
     active_player[doi_thu.id] = thread.id
 
-    await interaction.followup.send(f"Đã tạo phòng: {thread.mention}")
+    # Chỉ người gọi lệnh thấy xác nhận — tránh spam kênh chính
+    await interaction.followup.send(f"Đã tạo phòng: {thread.mention}", ephemeral=True)
     await thread.send(
         f"{interaction.user.mention} (Trắng) đấu với {doi_thu.mention} (Đen).\n"
-        f"Dùng menu trên ảnh bàn cờ để đi quân. Người xem chat được — bàn cờ luôn ở cuối."
+        f"Dùng menu trên ảnh bàn cờ để đi quân."
     )
-    await update_board(thread, game, "Khai cuộc", force_bottom=True)
+    await update_board(thread, game, "Khai cuộc", force_bottom=False)
 
 
 # ---------------------------------------------------------------------------
@@ -815,7 +803,7 @@ async def on_ready():
 
 @bot.event
 async def on_message(message: discord.Message):
-    # Giữ bàn cờ ở cuối khi có chat trong phòng đấu
+    # Chỉ đẩy bàn cờ xuống cuối khi có chat làm nó trôi (không ghim / không đổi tên)
     if message.guild is None:
         return
     if not isinstance(message.channel, discord.Thread):
@@ -825,14 +813,10 @@ async def on_message(message: discord.Message):
         return
     if message.id == game.board_message_id:
         return
-    # Bỏ qua tin hệ thống pin
-    if message.type in (
-        discord.MessageType.pins_add,
-        discord.MessageType.thread_created,
-    ):
+    if message.type != discord.MessageType.default and message.type != discord.MessageType.reply:
         return
-    # Bot gửi bàn cờ mới — không cần đẩy lại
-    if message.author.id == bot.user.id and message.embeds:
+    # Tin của bot (bàn cờ / thông báo) — không tự đẩy lại
+    if message.author.bot:
         return
 
     schedule_board_bottom(message.channel, game)
