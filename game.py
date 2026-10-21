@@ -1,12 +1,10 @@
 """
-game.py - Trạng thái một ván cờ: bàn cờ, render ảnh PNG, và tích hợp Stockfish
-cho chế độ đấu với máy.
+game.py - Trạng thái một ván cờ: bàn cờ và render ảnh PNG.
 """
 from dataclasses import dataclass, field
 from typing import Optional
 
 import chess
-import chess.engine
 import chess.svg
 import cairosvg
 
@@ -14,27 +12,25 @@ import cairosvg
 @dataclass
 class ChessGame:
     thread_id: int
-    white_id: Optional[int]  # Discord user id cầm quân Trắng, None = máy đi
-    black_id: Optional[int]  # Discord user id cầm quân Đen, None = máy đi
+    white_id: int
+    black_id: int
     board: chess.Board = field(default_factory=chess.Board)
-    vs_bot: bool = False
-    engine: Optional[chess.engine.UciProtocol] = None
     finished: bool = False
-    board_message_id: Optional[int] = None  # chỉ 1 tin nhắn bàn cờ / ván
+    board_message_id: Optional[int] = None
+    white_name: str = "Trắng"
+    black_name: str = "Đen"
+    _png_cache_fen: Optional[str] = field(default=None, repr=False)
+    _png_cache_bytes: Optional[bytes] = field(default=None, repr=False)
 
     def player_color(self, user_id: int) -> Optional[chess.Color]:
-        """Trả về màu quân của user_id trong ván này, hoặc None nếu chỉ là người xem."""
         if user_id == self.white_id:
             return chess.WHITE
         if user_id == self.black_id:
             return chess.BLACK
         return None
 
-    def is_bot_turn(self) -> bool:
-        if not self.vs_bot:
-            return False
-        turn_id = self.white_id if self.board.turn == chess.WHITE else self.black_id
-        return turn_id is None
+    def is_player(self, user_id: int) -> bool:
+        return user_id in (self.white_id, self.black_id)
 
     def legal_from_squares(self) -> list[chess.Square]:
         return sorted({m.from_square for m in self.board.legal_moves})
@@ -43,28 +39,22 @@ class ChessGame:
         return [m for m in self.board.legal_moves if m.from_square == from_sq]
 
     def render_png(self) -> bytes:
+        fen = self.board.fen()
+        if self._png_cache_fen == fen and self._png_cache_bytes is not None:
+            return self._png_cache_bytes
+
         last_move = self.board.peek() if self.board.move_stack else None
         check_square = self.board.king(self.board.turn) if self.board.is_check() else None
         svg_data = chess.svg.board(
             board=self.board,
             lastmove=last_move,
             check=check_square,
-            size=480,
+            size=400,
         )
-        return cairosvg.svg2png(bytestring=svg_data.encode("utf-8"))
-
-    def parse_move(self, text: str) -> Optional[chess.Move]:
-        """Chấp nhận cả ký hiệu SAN (e4, Nf3) lẫn UCI (e2e4)."""
-        text = text.strip()
-        try:
-            return self.board.parse_san(text)
-        except ValueError:
-            pass
-        try:
-            move = chess.Move.from_uci(text.lower())
-        except ValueError:
-            return None
-        return move if move in self.board.legal_moves else None
+        png = cairosvg.svg2png(bytestring=svg_data.encode("utf-8"))
+        self._png_cache_fen = fen
+        self._png_cache_bytes = png
+        return png
 
     def result_text(self) -> str:
         if self.board.is_checkmate():
@@ -80,6 +70,21 @@ class ChessGame:
             return "Hòa do lặp lại thế cờ 3 lần."
         return "Ván đấu kết thúc."
 
-    async def get_bot_move(self, think_time: float = 1.0) -> chess.Move:
-        result = await self.engine.play(self.board, chess.engine.Limit(time=think_time))
-        return result.move
+    def outcome(self) -> str:
+        """'1-0' | '0-1' | '1/2-1/2' | '*' """
+        if not self.board.is_game_over(claim_draw=True):
+            return "*"
+        result = self.board.result(claim_draw=True)
+        return result
+
+    def pgn_moves(self) -> str:
+        board = self.board.copy()
+        moves = list(board.move_stack)
+        board.reset()
+        parts: list[str] = []
+        for i, move in enumerate(moves):
+            if i % 2 == 0:
+                parts.append(f"{i // 2 + 1}.")
+            parts.append(board.san(move))
+            board.push(move)
+        return " ".join(parts) if parts else "(chưa có nước đi)"

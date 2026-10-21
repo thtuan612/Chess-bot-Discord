@@ -1,11 +1,8 @@
 # Chess Bot Discord
 
-Bot cờ vua cho Discord: tạo phòng đấu 1v1 hoặc đấu với máy (Stockfish).
-Mỗi ván chạy trong một **thread riêng**, tối đa 2 người chơi — người khác vào
-thread chỉ xem được, không đi quân được.
+Bot cờ vua 1v1 cho Discord. Mỗi ván chạy trong **thread riêng**; người khác vào xem được, không đi quân được.
 
-Đi quân bằng **Discord UI** (menu chọn ô trên ảnh bàn cờ), không dùng `/move`.
-Mỗi ván chỉ có **một ảnh bàn cờ** — bot cập nhật (edit) tin nhắn đó sau mỗi nước.
+Đi quân bằng **Discord UI** (menu trên ảnh bàn cờ). Bàn cờ luôn được **ghim và đẩy xuống cuối** thread khi có chat. Sau khi kết thúc, phòng công khai bị khoá và bản xem lại nằm trong **lịch sử riêng** (chỉ 2 người chơi + quản trị).
 
 ## Cài đặt
 
@@ -14,57 +11,49 @@ Mỗi ván chỉ có **một ảnh bàn cờ** — bot cập nhật (edit) tin n
    pip install -r requirements.txt
    ```
 
-2. Cài Stockfish (engine cờ vua) trên máy chủ:
-   - Ubuntu/Debian: `sudo apt install stockfish` (thường nằm ở `/usr/games/stockfish`)
-   - Hoặc tải binary tại https://stockfishchess.org/download/ rồi dùng đường dẫn đó.
-
-3. `cairosvg` (dùng để vẽ ảnh bàn cờ) cần thư viện Cairo của hệ thống:
+2. `cairosvg` cần Cairo trên hệ thống:
    - Ubuntu/Debian: `sudo apt install libcairo2`
 
-4. Tạo bot tại https://discord.com/developers/applications → New Application →
-   Bot → copy **Token**.
+3. Tạo bot tại https://discord.com/developers/applications → Bot → copy **Token**.
 
-5. Copy `.env.example` thành `.env` và điền:
+4. Copy `.env.example` thành `.env`:
    ```
-   DISCORD_TOKEN=token_bot_của_bạn
-   STOCKFISH_PATH=/usr/games/stockfish
+   DISCORD_TOKEN=token_bot_cua_ban
+   HISTORY_CHANNEL_ID=id_kenh_lich_su
    ```
+   Tạo một kênh văn bản (ví dụ `#cờ-lịch-sử`), bật quyền bot **Create Private Threads**, copy ID kênh vào `HISTORY_CHANNEL_ID`.
 
-6. Mời bot vào server với các quyền: Send Messages, Create Public Threads,
-   Send Messages in Threads, Manage Threads, Attach Files, Use Slash Commands.
+5. Mời bot với quyền: Send Messages, Create Public/Private Threads, Send Messages in Threads, Manage Threads, Manage Messages (xoá/ghim bàn cờ), Attach Files, Use Slash Commands.
 
-7. Chạy bot:
+6. Chạy:
    ```bash
    python bot.py
    ```
-   Slash command cần vài phút để đồng bộ lần đầu (hoặc ngay lập tức nếu test
-   trong 1 server cụ thể).
 
-## Các lệnh
+7. Trong kênh chính, quản trị chạy `/chess hub` một lần để gửi panel.
+
+## Lệnh
 
 | Lệnh | Mô tả |
 |---|---|
-| `/chess vs doi_thu:@ai_do` | Tạo phòng (thread) đấu 1v1 với người khác |
-| `/chess bot mau:Trắng/Đen elo:800-2800` | Tạo phòng đấu với Stockfish |
-| `/resign` | Đầu hàng ván đang đấu (cũng có nút trên bàn cờ) |
+| `/chess vs doi_thu:@ai_do` | Tạo phòng (thread) đấu 1v1 |
+| `/chess hub` | Gửi panel kênh chính (quản trị) |
+| `/leaderboard` | Bảng xếp hạng — phân trang Discord UI |
+| `/resign` | Đầu hàng (cũng có nút trên bàn cờ) |
 
-### Đi quân (UI)
+### Đi quân
 
-Trên ảnh bàn cờ:
+1. Chọn **ô xuất phát** → **ô đích**
+2. Phong cấp tốt nếu cần (Hậu / Xe / Tượng / Mã)
+3. **Chọn lại** / **Đầu hàng**
 
-1. Chọn **ô xuất phát** (menu 1)
-2. Chọn **ô đích** (menu 2)
-3. Nếu phong cấp tốt — chọn Hậu / Xe / Tượng / Mã
-4. **Chọn lại** để hủy bước đang chọn; **Đầu hàng** để bỏ cuộc
+## Tính năng chính
 
-Chỉ người chơi đúng lượt mới dùng được menu; người xem bị từ chối (ephemeral).
+- **Bảng xếp hạng**: `/leaderboard` hoặc nút trên hub — nút ⏮ ◀ ▶ ⏭ duyệt danh sách dài (10 người/trang), điểm = thắng 1 + hòa 0.5.
+- **Bàn cờ luôn ở cuối**: mỗi nước đi và mỗi lần có chat trong phòng, bot xoá tin cũ rồi gửi lại ở cuối + ghim (có debounce tránh spam API).
+- **Lịch sử**: khi ván xong, thread công khai bị khoá; bot tạo **private thread** trong kênh lịch sử, mời đúng 2 người chơi, gửi bàn cuối + chuỗi nước đi, rồi khoá (chỉ xem). Quản trị viên có quyền Manage Threads vẫn xem được.
+- **Hiệu suất**: cache PNG theo FEN, khoá theo thread, debounce đẩy bàn cờ, không còn tiến trình Stockfish.
 
-## Giới hạn hiện tại / có thể mở rộng sau
+## Đã gỡ
 
-- Chưa có cầu hòa (draw offer) — chỉ có đầu hàng.
-- Một người chỉ chơi được 1 ván tại 1 thời điểm (chặn mở ván thứ 2 khi ván cũ
-  chưa kết thúc).
-- Mỗi ván đấu máy mở 1 tiến trình Stockfish riêng, tự tắt khi ván kết thúc.
-- Thời gian suy nghĩ của máy cố định 1 giây/nước (`think_time` trong
-  `game.py` → `get_bot_move`), có thể chỉnh để máy mạnh/nhanh hơn.
-- UI đi quân không còn sau khi bot restart (ván đang chơi trong RAM sẽ mất).
+- Chế độ `/chess bot` (đấu Stockfish) — đã bỏ do lỗi ổn định.
