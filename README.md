@@ -4,6 +4,9 @@ Bot cờ vua cho Discord: tạo phòng đấu 1v1 hoặc đấu với máy (Stoc
 Mỗi ván chạy trong một **thread riêng**, tối đa 2 người chơi — người khác vào
 thread chỉ xem được, không đi quân được.
 
+Đi quân bằng **Discord UI** (menu chọn ô trên ảnh bàn cờ), không dùng `/move`.
+Mỗi ván chỉ có **một ảnh bàn cờ** — bot cập nhật (edit) tin nhắn đó sau mỗi nước.
+
 ## Cài đặt
 
 1. Cài thư viện Python (khuyến nghị Python 3.10+):
@@ -43,20 +46,25 @@ thread chỉ xem được, không đi quân được.
 |---|---|
 | `/chess vs doi_thu:@ai_do` | Tạo phòng (thread) đấu 1v1 với người khác |
 | `/chess bot mau:Trắng/Đen elo:800-2800` | Tạo phòng đấu với Stockfish |
-| `/move nuoc_di:e4` | Đi quân — hỗ trợ cả SAN (`e4`, `Nf3`) và UCI (`e2e4`) |
-| `/board` | Gửi lại ảnh bàn cờ hiện tại |
-| `/resign` | Đầu hàng ván đang đấu |
+| `/resign` | Đầu hàng ván đang đấu (cũng có nút trên bàn cờ) |
 
-Mỗi ván tạo một **public thread** riêng dưới kênh gọi lệnh — ai trong kênh đó
-cũng xem được thread, nhưng `/move` chỉ hoạt động với 2 người chơi đã đăng ký
-cho ván đó; người khác gõ `/move` sẽ nhận phản hồi riêng (ephemeral) báo không
-có quyền đi.
+### Đi quân (UI)
+
+Trên ảnh bàn cờ:
+
+1. Chọn **ô xuất phát** (menu 1)
+2. Chọn **ô đích** (menu 2)
+3. Nếu phong cấp tốt — chọn Hậu / Xe / Tượng / Mã
+4. **Chọn lại** để hủy bước đang chọn; **Đầu hàng** để bỏ cuộc
+
+Chỉ người chơi đúng lượt mới dùng được menu; người xem bị từ chối (ephemeral).
 
 ## Giới hạn hiện tại / có thể mở rộng sau
 
-- Chưa có cầu hòa (draw offer) — chỉ có đầu hàng (`/resign`).
+- Chưa có cầu hòa (draw offer) — chỉ có đầu hàng.
 - Một người chỉ chơi được 1 ván tại 1 thời điểm (chặn mở ván thứ 2 khi ván cũ
   chưa kết thúc).
 - Mỗi ván đấu máy mở 1 tiến trình Stockfish riêng, tự tắt khi ván kết thúc.
 - Thời gian suy nghĩ của máy cố định 1 giây/nước (`think_time` trong
   `game.py` → `get_bot_move`), có thể chỉnh để máy mạnh/nhanh hơn.
+- UI đi quân không còn sau khi bot restart (ván đang chơi trong RAM sẽ mất).

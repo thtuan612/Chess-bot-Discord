@@ -14,12 +14,13 @@ import cairosvg
 @dataclass
 class ChessGame:
     thread_id: int
-    white_id: Optional[int]          # Discord user id cầm quân Trắng, None = máy đi
-    black_id: Optional[int]          # Discord user id cầm quân Đen, None = máy đi
+    white_id: Optional[int]  # Discord user id cầm quân Trắng, None = máy đi
+    black_id: Optional[int]  # Discord user id cầm quân Đen, None = máy đi
     board: chess.Board = field(default_factory=chess.Board)
     vs_bot: bool = False
     engine: Optional[chess.engine.UciProtocol] = None
     finished: bool = False
+    board_message_id: Optional[int] = None  # chỉ 1 tin nhắn bàn cờ / ván
 
     def player_color(self, user_id: int) -> Optional[chess.Color]:
         """Trả về màu quân của user_id trong ván này, hoặc None nếu chỉ là người xem."""
@@ -34,6 +35,12 @@ class ChessGame:
             return False
         turn_id = self.white_id if self.board.turn == chess.WHITE else self.black_id
         return turn_id is None
+
+    def legal_from_squares(self) -> list[chess.Square]:
+        return sorted({m.from_square for m in self.board.legal_moves})
+
+    def legal_moves_from(self, from_sq: chess.Square) -> list[chess.Move]:
+        return [m for m in self.board.legal_moves if m.from_square == from_sq]
 
     def render_png(self) -> bytes:
         last_move = self.board.peek() if self.board.move_stack else None
@@ -76,4 +83,3 @@ class ChessGame:
     async def get_bot_move(self, think_time: float = 1.0) -> chess.Move:
         result = await self.engine.play(self.board, chess.engine.Limit(time=think_time))
         return result.move
-      
